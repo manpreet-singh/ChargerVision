@@ -6,39 +6,42 @@ GUI program for Calibration
 This Program is meant to run on a computer to find the lower/upper HSV Values for calibration
 """
 
-import numpy as np
+from pprint import pprint
+
 import cv2 as cv
+import numpy as np
 from networktables import NetworkTable
 
-def nothing(x):
+from Template import Template
+
+
+def nothing(foo):
 	pass
 
 nt = NetworkTable.getTable("VISION")
-
+target_template = Template()
 cap = cv.VideoCapture(0)
 
 cv.namedWindow('Control')
 cv.createTrackbar('Lower_Hue', 'Control', 0, 255, nothing)
-cv.createTrackbar('Upper_Hue', 'Control',0, 255, nothing)
+cv.createTrackbar('Upper_Hue', 'Control', 0, 255, nothing)
 
 cv.createTrackbar('Lower_Sat', 'Control', 0, 255, nothing)
-cv.createTrackbar('Upper_Sat', 'Control',0, 255, nothing)
+cv.createTrackbar('Upper_Sat', 'Control', 0, 255, nothing)
 
 cv.createTrackbar('Lower_Vib', 'Control', 0, 255, nothing)
-cv.createTrackbar('Upper_Vib', 'Control',0, 255, nothing)
+cv.createTrackbar('Upper_Vib', 'Control', 0, 255, nothing)
 
-cv.createTrackbar('Contour', 'Control',-1, 9, nothing)
+cv.createTrackbar('Contour', 'Control', 0, 12, nothing)
 
 switch = 'Track Object \n0 : OFF \n1 : ON'
-cv.createTrackbar(switch, 'Control',0,1,nothing)
+cv.createTrackbar(switch, 'Control', 0, 1, nothing)
 
 font = cv.FONT_HERSHEY_SIMPLEX
 
-while(True):
+while True:
 	_, im = cap.read()
-	#im = np.array(im, dtype=np.uint8)
-	#imgray = cv.cvtColor(im,cv.COLOR_BGR2GRAY)
-	
+	im = np.array(im, dtype=np.uint8)
 	hsv = cv.cvtColor(im, cv.COLOR_BGR2HSV)
 	
 	lower_hue = cv.getTrackbarPos('Lower_Hue', 'Control')
@@ -54,27 +57,25 @@ while(True):
 	
 	switch_val = cv.getTrackbarPos(switch, 'Control')
 	
-	#for testing
+	# for testing
 	lower_limit = np.array([lower_hue, lower_sat, lower_vib])
 	upper_limit = np.array([upper_hue, upper_sat, upper_vib])
 	
-	mask = cv.inRange(hsv, lower_limit, upper_limit)
+	im_mask = cv.inRange(hsv, lower_limit, upper_limit)
 	
-	res = cv.bitwise_and(im, im, mask= mask)	
+	im_res = cv.bitwise_and(im, im, mask=im_mask)
 	
-	_,contours, hierarchy = cv.findContours(mask,cv.RETR_TREE,cv.CHAIN_APPROX_SIMPLE)
+	_, contours, hierarchy = cv.findContours(im_mask, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
 	
-	cv.drawContours(res, contours, -1, (255,0,0), 1)
+	cv.drawContours(im_res, contours, -1, (255, 0, 0), 1)
 		
 	if switch_val == 1 and len(contours) > 0: 
-		
-		contour_areas = [cv.contourArea(c) for c in contours]
-		max_index = np.argmax(contour_areas)
-		cnt = contours[max_index]
-		
+
+		cnt = contours[target_template.best_match(contours)]
+
 		# Access object for contour data
 		moments = cv.moments(cnt)
-		if(moments['m00'] != 0):
+		if moments['m00'] != 0:
 			# Get center of contour coordinates
 			centroid_x = int(moments['m10'] / moments['m00'])
 			centroid_y = int(moments['m01'] / moments['m00'])
@@ -83,28 +84,29 @@ while(True):
 			nt.putNumber('centerY', centroid_y)
 			
 			# Print the Coordinates onto image
-			x_t = 'x:%s' % (centroid_x)
-			y_t = 'y:%s' % (centroid_y)
+			x_t = 'x:%s' % centroid_x
+			y_t = 'y:%s' % centroid_y
 			angle = 'a:%s' % (480 / (68.5 * np.sin(np.arctan(.75))) * centroid_y + 480)
 			
-			cv.putText(res,x_t,(10,40), font, 1.2,(255,0,255),2)
-			cv.putText(res,y_t,(10,90), font, 1.2,(255,255,0),2)
-			cv.putText(res,angle, (10, 140), font, 1.2,(255,255,255),2)
+			cv.putText(im_res, x_t, (10, 40), font, 1, (255, 0, 255), 0)
+			cv.putText(im_res, y_t, (10, 70), font, 1, (255, 255, 0), 0)
+			cv.putText(im_res, angle, (10, 100), font, 1, (255, 255, 255), 0)
 			
-			# Draw Circle around center of Contour
-			cv.circle(res, (centroid_x, centroid_y), 5, (255,0,255), -1)
+			# Draw dot at the center of the Contour
+			cv.circle(im_res, (centroid_x, centroid_y), 2, (255, 0, 255), 1)
 		
-		# Draw Rectangle around center of Contour
-		x,y,w,h = cv.boundingRect(cnt)
-		cv.rectangle(res,(x,y),(x+w,y+h),(0,255,0),2)
-		w_t = 'w:%s' % (w)
-		cv.putText(res,w_t,(150,40),font,1.2,(0,255,255),2)
+		# Draw Bounding Rectangle around Contour
+		x, y, w, h = cv.boundingRect(cnt)
+		cv.rectangle(im_res, (x, y), (x + w, y + h), (0, 255, 0), 1)
 	
-	#Display output windows	
-	cv.imshow('Output', res)
+	# Display output windows
+	cv.imshow('Output', im_res)
 	cv.imshow('hsv', hsv)
+
 	if cv.waitKey(1) & 0xFF == ord('q'):
+		cv.destroyAllWindows()
+		# print out the list of matched contours, ordered from the most likely to least likely
+		pprint(target_template.list_of_matched(contours))
 		break
-        
+
 cap.release()
-cv.destroyAllWindows()

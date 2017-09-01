@@ -29,7 +29,7 @@ while True:
 	
 	_, contours, hierarchy = cv.findContours(mask,cv.RETR_TREE,cv.CHAIN_APPROX_SIMPLE)
 		
-	if switch_val == 1 and len(contours) > 0: 
+	if len(contours) > 0:
 
 		template.best_match(contours)
 		

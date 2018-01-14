@@ -10,7 +10,7 @@ from pprint import pprint
 
 import cv2 as cv
 import numpy as np
-from networktables import NetworkTable
+from networktables import NetworkTables
 
 from Template import Template
 
@@ -18,7 +18,8 @@ from Template import Template
 def nothing(foo):
 	pass
 
-nt = NetworkTable.getTable("VISION")
+NetworkTables.initialize()
+nt = NetworkTables.getTable("VISION")
 target_template = Template()
 cap = cv.VideoCapture(0)
 
